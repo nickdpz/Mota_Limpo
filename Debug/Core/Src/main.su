@@ -1,0 +1,9 @@
+main.c:74:6:RX_Lora	8	static
+main.c:81:6:Config_Lora	24	static
+main.c:154:6:Ini_RN	8	static
+main.c:169:5:main	8	static
+main.c:225:6:SystemClock_Config	88	static
+main.c:269:13:MX_NVIC_Init	8	static
+main.c:281:13:MX_USART3_UART_Init	8	static
+main.c:314:13:MX_GPIO_Init	40	static
+main.c:366:6:Error_Handler	8	static
