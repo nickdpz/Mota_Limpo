@@ -76,13 +76,13 @@ void loop() {
   if ((WiFi.status() == WL_CONNECTED)) {
     distance=sonar1.ping_cm();
     if(sonar2.ping_cm()>distance){
-      distance=sonar2.ping_cm() 
+      distance=sonar2.ping_cm(); 
     }
     Serial.print("Ping: ");
-    Serial.print();
+    Serial.print(distance);
     Serial.println("cm");
     if(distance<12){
-      alert(distance);
+      alert();
     }
   }
   delay(10000);
