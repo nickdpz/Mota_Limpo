@@ -28,7 +28,7 @@ long startTime = 0;
 char buffer[60] = "";
 int distance = 0;
 int bootCount = 0;
-bool flagCollect = false;
+bool flagOpen = false;
 bool flagSuccess = false;
 bool flagAlert1 = false;
 bool flagInterrupt = true;
@@ -88,14 +88,18 @@ void IRAM_ATTR irq_button_c()
     flagInterrupt = false;
     Serial.println("IRQ");
     if (flagAlert1) {
-      if (flagCollect) {
-        flagSuccess = true;
-        flagAlert1 = false;
-         Serial.println("Close Container");
+      if (flagOpen) {
+        Serial.println("Close Container");
+        distance = sonar1.ping_cm();
+        if (distance > 35) {
+          flagSuccess = true;
+          flagAlert1 = false;
+          digitalWrite(LED_STATUS, flagAlert1);
+        }
       } else {
         Serial.println("Open Container");
       }
-      flagCollect = !flagCollect;
+      flagOpen = !flagOpen;
       startTime = millis();
     }
   }
@@ -126,48 +130,44 @@ void callback() {
   Serial.println("Callback");
   Serial.flush();
 }
+#define LIGHT_WAKE_PIN D5
 void loop() {
   Serial.println("Enter light sleep mode");
   detachInterrupt(digitalPinToInterrupt(BUTTON_C));
-  //uint32_t sleep_time_in_s = 100000;
-  uint32_t sleep_time_in_s = 3600;//1 minite
+  //uint32_t sleep_time_in_ms = 60000;
+  uint32_t sleep_time_in_ms = 6000;
+  gpio_pin_wakeup_enable(GPIO_ID_PIN(LIGHT_WAKE_PIN), GPIO_PIN_INTR_LOLEVEL);
   wifi_set_opmode(NULL_MODE);
-  gpio_pin_wakeup_enable(GPIO_ID_PIN(BUTTON_C), GPIO_PIN_INTR_HILEVEL);
-  wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
   wifi_fpm_open();
+  wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
   wifi_fpm_set_wakeup_cb(callback);
-  wifi_fpm_do_sleep(sleep_time_in_s *1000 * 1000 );
-  delay(sleep_time_in_s + 1);
+  wifi_fpm_do_sleep(sleep_time_in_ms * 1000 );
+  delay(sleep_time_in_ms + 1);
   Serial.println("Exit light sleep mode");
   initWiFi();
-  if (!flagCollect) {
-    distance = sonar1.ping_cm();
-    for (uint8_t count = 0; count < 30; count++) {
-      if (WiFi.status() == WL_CONNECTED) {
-        distance = (sonar1.ping_cm() + distance) / 2;
-        if (distance == 0) {
-          distance = 200;
-        }
-        Serial.print("Ping: ");
-        Serial.print(distance);
-        Serial.println("cm");
-        if (flagSuccess) {
-          if (distance > 35) {
-            success();
-          }
-          flagSuccess = false;
-        }
-        if (distance < 37) {
-          flagAlert1 = true;
-          digitalWrite(LED_STATUS, flagAlert1);
-        }
-        statusOn();
+  distance = sonar1.ping_cm();
+  for (uint8_t count = 0; count < 30; count++) {
+    if ((!flagOpen) && (WiFi.status() == WL_CONNECTED)) {
+      distance = (sonar1.ping_cm() + distance) / 2;
+      if (distance == 0) {
+        distance = 200;
       }
+      Serial.print("D: ");
+      Serial.println(distance);
+      if (flagSuccess) {
+        success();
+        flagSuccess = false;
+      }
+      if (distance < 37) {
+        flagAlert1 = true;
+        digitalWrite(LED_STATUS, flagAlert1);
+      }
+      statusOn();
     }
   }
   alert();
   wifi_set_sleep_type(NONE_SLEEP_T);
-  delay(10000);  //  Put the esp to sleep for 15s
+  delay(10000);
 }
 
 void statusOn() {
