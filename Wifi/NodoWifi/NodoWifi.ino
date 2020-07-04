@@ -14,6 +14,7 @@ extern "C" {
 #define ECHO_PIN_2     12//12 - D6
 #define BUTTON_C       5//16 - D0//5 - D1
 #define MAX_DISTANCE   500
+#define GPIO_AS_INPUT(gpio_bits) gpio_output_conf(0, 0, 0, gpio_bits)
 
 #define SERVER_IP_ALERT "http://192.168.0.7:3000/routes"
 #define SERVER_IP_TEST "http://192.168.0.7:3000/routes/test"
@@ -39,7 +40,6 @@ HTTPClient http;
 void alert() {
   sprintf(buffer, "{\"eui\":\"%s\",\"psk\":\"%s\",\"data\":%d}", stassid, stapsk, distance);
   Serial.print("[HTTP] begin...\n");
-  // configure traged server and url
   http.begin(client, SERVER_IP_TEST); //HTTP
   http.addHeader("Content-Type", "application/json");
   int httpCode = http.POST(buffer);
@@ -106,6 +106,8 @@ void IRAM_ATTR irq_button_c()
 }
 
 void initWiFi() {
+  wifi_set_sleep_type(NONE_SLEEP_T);
+  wifi_fpm_close();
   attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   WiFi.mode(WIFI_STA);
   WiFi.begin(stassid, stapsk);
@@ -116,37 +118,38 @@ void initWiFi() {
   Serial.println("Connected!");
   digitalWrite(LED_STATUS, flagAlert1);
 }
-//The setup function is called once at startup of the sketch
+
 void setup() {
   pinMode(LED_WIFI, OUTPUT);
   pinMode(LED_STATUS, OUTPUT);
   pinMode(BUTTON_C, INPUT_PULLUP);
   digitalWrite(LED_WIFI, LOW);
   digitalWrite(LED_STATUS, LOW);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   Serial.begin(9600);
   Serial.println("Finish Config");
 }
+
 void callback() {
   Serial.println("Callback");
   Serial.flush();
 }
-#define LIGHT_WAKE_PIN D5
+
+#define LIGHT_WAKE_PIN D1
 void loop() {
   Serial.println("Enter light sleep mode");
   detachInterrupt(digitalPinToInterrupt(BUTTON_C));
-  //uint32_t sleep_time_in_ms = 60000;
-  uint32_t sleep_time_in_ms = 6000;
-  gpio_pin_wakeup_enable(GPIO_ID_PIN(LIGHT_WAKE_PIN), GPIO_PIN_INTR_LOLEVEL);
+  uint32_t sleep_time_in_ms = 60000;
   wifi_set_opmode(NULL_MODE);
   wifi_fpm_open();
-  wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
+  wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);//LIGHT_SLEEP_T//MODEM_SLEEP_T
   wifi_fpm_set_wakeup_cb(callback);
   wifi_fpm_do_sleep(sleep_time_in_ms * 1000 );
   delay(sleep_time_in_ms + 1);
   Serial.println("Exit light sleep mode");
   initWiFi();
   distance = sonar1.ping_cm();
-  for (uint8_t count = 0; count < 30; count++) {
+  for (uint8_t count = 0; count < 40; count++) {
     if ((!flagOpen) && (WiFi.status() == WL_CONNECTED)) {
       distance = (sonar1.ping_cm() + distance) / 2;
       if (distance == 0) {
@@ -166,7 +169,6 @@ void loop() {
     }
   }
   alert();
-  wifi_set_sleep_type(NONE_SLEEP_T);
   delay(10000);
 }
 
