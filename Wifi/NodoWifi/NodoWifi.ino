@@ -39,11 +39,11 @@ HTTPClient http;
 
 void alert() {
   sprintf(buffer, "{\"eui\":\"%s\",\"psk\":\"%s\",\"data\":%d}", stassid, stapsk, distance);
+  Serial.print("[HTTP] Alert...\n");
   Serial.print("[HTTP] begin...\n");
   http.begin(client, SERVER_IP_TEST); //HTTP
   http.addHeader("Content-Type", "application/json");
   int httpCode = http.POST(buffer);
-  //int httpCode = http.POST("{\"hello\":\"world\"}");
   String payload = http.getString();
   if (httpCode > 0) {
     Serial.printf("[HTTP] POST... code: %d\n", httpCode);
@@ -60,25 +60,29 @@ void alert() {
 }
 
 void success() {
-  sprintf(buffer, "{\"eui\":\"%s\",\"psk\":\"%s\"}", stassid, stapsk);
-  Serial.print("[HTTP] begin...\n");
-  http.begin(client, SERVER_IP_SUCCESS); //HTTP
-  http.addHeader("Content-Type", "application/json");
-  int httpCode = http.POST(buffer);
-  String payload = http.getString();
-  if (httpCode > 0) {
-    Serial.printf("[HTTP] POST... code: %d\n", httpCode);
-    if (httpCode == HTTP_CODE_OK) {
-      const String& payload = http.getString();
-      Serial.println("received payload:\n<<");
-      Serial.println(payload);
-      Serial.println(">>");
+  if (flagSuccess) {
+
+    sprintf(buffer, "{\"eui\":\"%s\",\"psk\":\"%s\"}", stassid, stapsk);
+    Serial.print("[HTTP] Success...\n");
+    http.begin(client, SERVER_IP_SUCCESS); //HTTP
+    http.addHeader("Content-Type", "application/json");
+    int httpCode = http.POST(buffer);
+    String payload = http.getString();
+    if (httpCode > 0) {
+      Serial.printf("[HTTP] POST... code: %d\n", httpCode);
+      if (httpCode == HTTP_CODE_OK) {
+        const String& payload = http.getString();
+        Serial.println("received payload:\n<<");
+        Serial.println(payload);
+        Serial.println(">>");
+      }
+    } else {
+      Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
     }
-  } else {
-    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    http.end();
+    digitalWrite(LED_STATUS, LOW);
+    flagSuccess = false;
   }
-  http.end();
-  digitalWrite(LED_STATUS, LOW);
 }
 
 void IRAM_ATTR irq_button_c()
@@ -94,7 +98,6 @@ void IRAM_ATTR irq_button_c()
         if (distance > 35) {
           flagSuccess = true;
           flagAlert1 = false;
-          digitalWrite(LED_STATUS, flagAlert1);
         }
       } else {
         Serial.println("Open Container");
@@ -125,6 +128,7 @@ void setup() {
   digitalWrite(LED_WIFI, LOW);
   digitalWrite(LED_STATUS, LOW);
   Serial.begin(9600);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   Serial.println("Finish Config");
 }
 
@@ -144,7 +148,7 @@ void set_light_sleep() {
 
 void loop() {
   if (!flagOpen) {
-    set_light_sleep();
+    success();
     initWiFi();
     distance = sonar1.ping_cm();
     for (uint8_t count = 0; count < 40; count++) {
@@ -155,10 +159,6 @@ void loop() {
         }
         Serial.print("D: ");
         Serial.println(distance);
-        if (flagSuccess) {
-          success();
-          flagSuccess = false;
-        }
         if (distance < 37) {
           flagAlert1 = true;
           digitalWrite(LED_STATUS, flagAlert1);
@@ -168,11 +168,11 @@ void loop() {
     }
     if (!flagOpen) {
       alert();
+      set_light_sleep();
     }
   } else {
     statusOn(1);
   }
-  delay(10000);
 }
 
 void statusOn(int time) {
