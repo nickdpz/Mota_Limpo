@@ -108,7 +108,6 @@ void IRAM_ATTR irq_button_c()
 void initWiFi() {
   wifi_set_sleep_type(NONE_SLEEP_T);
   wifi_fpm_close();
-  attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   WiFi.mode(WIFI_STA);
   WiFi.begin(stassid, stapsk);
   while (WiFi.status() != WL_CONNECTED) {
@@ -125,57 +124,61 @@ void setup() {
   pinMode(BUTTON_C, INPUT_PULLUP);
   digitalWrite(LED_WIFI, LOW);
   digitalWrite(LED_STATUS, LOW);
-  attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   Serial.begin(9600);
   Serial.println("Finish Config");
 }
 
-void callback() {
-  Serial.println("Callback");
-  Serial.flush();
-}
-
-#define LIGHT_WAKE_PIN D1
-void loop() {
+void set_light_sleep() {
   Serial.println("Enter light sleep mode");
   detachInterrupt(digitalPinToInterrupt(BUTTON_C));
   uint32_t sleep_time_in_ms = 60000;
   wifi_set_opmode(NULL_MODE);
   wifi_fpm_open();
   wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);//LIGHT_SLEEP_T//MODEM_SLEEP_T
-  wifi_fpm_set_wakeup_cb(callback);
+  digitalWrite(LED_WIFI, HIGH);
   wifi_fpm_do_sleep(sleep_time_in_ms * 1000 );
   delay(sleep_time_in_ms + 1);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   Serial.println("Exit light sleep mode");
-  initWiFi();
-  distance = sonar1.ping_cm();
-  for (uint8_t count = 0; count < 40; count++) {
-    if ((!flagOpen) && (WiFi.status() == WL_CONNECTED)) {
-      distance = (sonar1.ping_cm() + distance) / 2;
-      if (distance == 0) {
-        distance = 200;
+}
+
+void loop() {
+  if (!flagOpen) {
+    set_light_sleep();
+    initWiFi();
+    distance = sonar1.ping_cm();
+    for (uint8_t count = 0; count < 40; count++) {
+      if ((!flagOpen) && (WiFi.status() == WL_CONNECTED)) {
+        distance = (sonar1.ping_cm() + distance) / 2;
+        if (distance == 0) {
+          distance = 200;
+        }
+        Serial.print("D: ");
+        Serial.println(distance);
+        if (flagSuccess) {
+          success();
+          flagSuccess = false;
+        }
+        if (distance < 37) {
+          flagAlert1 = true;
+          digitalWrite(LED_STATUS, flagAlert1);
+        }
+        statusOn(10);
       }
-      Serial.print("D: ");
-      Serial.println(distance);
-      if (flagSuccess) {
-        success();
-        flagSuccess = false;
-      }
-      if (distance < 37) {
-        flagAlert1 = true;
-        digitalWrite(LED_STATUS, flagAlert1);
-      }
-      statusOn();
     }
+    if (!flagOpen) {
+      alert();
+    }
+  } else {
+    statusOn(1);
   }
-  alert();
   delay(10000);
 }
 
-void statusOn() {
+void statusOn(int time) {
   digitalWrite(LED_WIFI, HIGH);
-  delay(1000);
+  delay(time * 100);
   digitalWrite(LED_WIFI, LOW);
-  delay(1000);
+  delay(time * 100);
   flagInterrupt = true;
 }
