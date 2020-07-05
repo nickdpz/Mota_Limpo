@@ -16,13 +16,18 @@ extern "C" {
 #define MAX_DISTANCE   500
 #define GPIO_AS_INPUT(gpio_bits) gpio_output_conf(0, 0, 0, gpio_bits)
 
-#define SERVER_IP_ALERT "http://192.168.0.7:3000/routes"
+//#define SERVER_IP_ROUTE "http://ritaportal.udistrital.edu.co:10280/routes"
+#define SERVER_IP_ROUTE "http://192.168.0.7:3000/routes"
 #define SERVER_IP_TEST "http://192.168.0.7:3000/routes/test"
+//#define SERVER_IP_TEST "http://ritaportal.udistrital.edu.co:10280/test"
 #define SERVER_IP_SUCCESS "http://192.168.0.7:3000/routes/success"
 
 NewPing sonar1(TRIGGER_PIN, ECHO_PIN_1, MAX_DISTANCE);
 const char* stassid = "JAPEREZ";
 const char* stapsk = "26071967";
+
+const char* eui = "00091";
+const char* euipsk = "e9h5fy@cf1yn4.$";
 
 const int timeThreshold = 150;
 long startTime = 0;
@@ -38,10 +43,10 @@ WiFiClient client;
 HTTPClient http;
 
 void alert() {
-  sprintf(buffer, "{\"eui\":\"%s\",\"psk\":\"%s\",\"data\":%d}", stassid, stapsk, distance);
+  sprintf(buffer, "{\"eui\":\"%s\",\"pass\":\"%s\",\"content\":%d}", eui, euipsk, distance);
   Serial.print("[HTTP] Alert...\n");
   Serial.print("[HTTP] begin...\n");
-  http.begin(client, SERVER_IP_TEST); //HTTP
+  http.begin(client, SERVER_IP_ROUTE); //HTTP
   http.addHeader("Content-Type", "application/json");
   int httpCode = http.POST(buffer);
   String payload = http.getString();
@@ -61,7 +66,6 @@ void alert() {
 
 void success() {
   if (flagSuccess) {
-
     sprintf(buffer, "{\"eui\":\"%s\",\"psk\":\"%s\"}", stassid, stapsk);
     Serial.print("[HTTP] Success...\n");
     http.begin(client, SERVER_IP_SUCCESS); //HTTP
@@ -91,34 +95,37 @@ void IRAM_ATTR irq_button_c()
   {
     flagInterrupt = false;
     Serial.println("IRQ");
-    if (flagAlert1) {
-      if (flagOpen) {
-        Serial.println("Close Container");
+    if (flagOpen) {
+      Serial.println("Close Container");
+      if (flagAlert1) {
         distance = sonar1.ping_cm();
         if (distance > 35) {
           flagSuccess = true;
           flagAlert1 = false;
         }
-      } else {
-        Serial.println("Open Container");
       }
-      flagOpen = !flagOpen;
-      startTime = millis();
+    } else {
+      Serial.println("Open Container");
     }
+    flagOpen = !flagOpen;
+    startTime = millis();
+    flagInterrupt = true;
   }
 }
 
 void initWiFi() {
-  wifi_set_sleep_type(NONE_SLEEP_T);
-  wifi_fpm_close();
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(stassid, stapsk);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  if (WiFi.status() != WL_CONNECTED) {
+    wifi_set_sleep_type(NONE_SLEEP_T);
+    wifi_fpm_close();
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(stassid, stapsk);
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+    }
+    Serial.println("Connected!");
+    digitalWrite(LED_STATUS, flagAlert1);
   }
-  Serial.println("Connected!");
-  digitalWrite(LED_STATUS, flagAlert1);
 }
 
 void setup() {
@@ -135,7 +142,7 @@ void setup() {
 void set_light_sleep() {
   Serial.println("Enter light sleep mode");
   detachInterrupt(digitalPinToInterrupt(BUTTON_C));
-  uint32_t sleep_time_in_ms = 60000;
+  uint32_t sleep_time_in_ms = 600000;
   wifi_set_opmode(NULL_MODE);
   wifi_fpm_open();
   wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);//LIGHT_SLEEP_T//MODEM_SLEEP_T
@@ -148,7 +155,6 @@ void set_light_sleep() {
 
 void loop() {
   if (!flagOpen) {
-    success();
     initWiFi();
     distance = sonar1.ping_cm();
     for (uint8_t count = 0; count < 40; count++) {
