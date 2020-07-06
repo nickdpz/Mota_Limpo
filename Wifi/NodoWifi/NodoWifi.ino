@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+#include <ArduinoJson.h>
 #include <NewPing.h>
 // Required for LIGHT_SLEEP_T delay mode
 extern "C" {
@@ -14,10 +15,11 @@ extern "C" {
 #define ECHO_PIN_2     12//12 - D6
 #define BUTTON_C       5//16 - D0//5 - D1
 #define MAX_DISTANCE   500
-#define GPIO_AS_INPUT(gpio_bits) gpio_output_conf(0, 0, 0, gpio_bits)
 
 //#define SERVER_IP_ROUTE "http://ritaportal.udistrital.edu.co:10280/routes"
 #define SERVER_IP_ROUTE "http://192.168.0.7:3000/routes"
+#define SERVER_IP_WIFI "http://192.168.0.7:3000/nodes/network"
+//#define SERVER_IP_WIFI "http://ritaportal.udistrital.edu.co:10280/nodes/network"
 #define SERVER_IP_TEST "http://192.168.0.7:3000/routes/test"
 //#define SERVER_IP_TEST "http://ritaportal.udistrital.edu.co:10280/test"
 #define SERVER_IP_SUCCESS "http://192.168.0.7:3000/routes/success"
@@ -64,28 +66,33 @@ void alert() {
   http.end();
 }
 
-void success() {
-  if (flagSuccess) {
-    sprintf(buffer, "{\"eui\":\"%s\",\"psk\":\"%s\"}", stassid, stapsk);
+void getWifi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    sprintf(buffer, "{\"eui\":\"%s\",\"pass\":\"%s}", eui, euipsk);
     Serial.print("[HTTP] Success...\n");
-    http.begin(client, SERVER_IP_SUCCESS); //HTTP
+    http.begin(client, SERVER_IP_WIFI);
     http.addHeader("Content-Type", "application/json");
     int httpCode = http.POST(buffer);
     String payload = http.getString();
     if (httpCode > 0) {
       Serial.printf("[HTTP] POST... code: %d\n", httpCode);
       if (httpCode == HTTP_CODE_OK) {
-        const String& payload = http.getString();
-        Serial.println("received payload:\n<<");
-        Serial.println(payload);
-        Serial.println(">>");
+        DynamicJsonDocument doc(1024);
+        DeserializationError error = deserializeJson(doc, http.getString());
+        if (error)
+          return;
+        stassid = doc["idWiFi"];
+        stapsk = doc["passWiFi"];
+        Serial.print("Id WiFi:");
+        Serial.println(stassid);
+        Serial.print("PSK:");
+        Serial.print(stapsk);
       }
     } else {
       Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
     }
     http.end();
-    digitalWrite(LED_STATUS, LOW);
-    flagSuccess = false;
+    initWiFi();
   }
 }
 
@@ -136,6 +143,7 @@ void setup() {
   digitalWrite(LED_STATUS, LOW);
   Serial.begin(9600);
   attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
+  initWiFi();
   Serial.println("Finish Config");
 }
 
