@@ -47,12 +47,11 @@ const int timeThreshold = 150;
 long startTime = 0;
 char bufferP[60] = "";
 int distance = 0;
-int bootCount = 0;
 bool flagOpen = false;
 bool flagClose = false;
 bool flagAlert1 = false;
 bool flagInterrupt = true;
-int count = 0;
+int voltaje = 10;
 WiFiClient client;
 HTTPClient http;
 NewPing sonar1(TRIGGER_PIN, ECHO_PIN_1, MAX_DISTANCE);
@@ -150,11 +149,15 @@ void initWiFi() {
     }
     display.clearDisplay();
     display.setCursor(0, 4);
-    sprintf(bufferP, "Connected to %s", stassid);
-    display.println(bufferP);
+    display.setTextSize(2);
+    display.println("Connected");
+    display.setTextSize(1);
+    display.setCursor(6, 22);
+    display.print("to ");
+    display.print(stassid);
     display.display();
     digitalWrite(LED_STATUS, flagAlert1);
-    delay(1000);
+    delay(3000);
   }
 }
 
@@ -203,12 +206,13 @@ void loop() {
             flagClose = false;
             flagAlert1 = false;
             digitalWrite(LED_STATUS, false);
+            printCharacter(' ', 80);
           }
         }
         if (distance < 37) {
           flagAlert1 = true;
           digitalWrite(LED_STATUS, true);
-          printAlert();
+          printCharacter('A', 80);
         }
         printMeasure();
         statusOn(10);
@@ -249,14 +253,16 @@ void measuareDistanse() {
   sprintf(bufferP, "D1: %i D2: %i", aux1, aux2);
   Serial.println(bufferP);
   if (abs(aux2 - aux1) > 30) {
-    printShake();
+    printCharacter('S', 70);
+  } else {
+    printCharacter(' ', 70);
   }
   distance = ((aux1 + aux2) * 0.5 + distance) * 0.5;
 }
 
 void printMeasure() {
   int rssi = WiFi.RSSI();
-  int voltaje = ESP.getVcc();
+  voltaje = round(map(analogRead (A0), 0, 1023, 0, 100)); // leer conversor
   sprintf(bufferP, "D: %i P: %i V: %i", distance, rssi, voltaje);
   Serial.println(bufferP);
   display.fillRect(0, 25, 128, 8, BLACK);
@@ -264,21 +270,14 @@ void printMeasure() {
   display.setCursor(0, 25);
   display.print(bufferP);
   display.display();
-  levelBattery(91);
+  levelBattery(voltaje);
   levelWiFi(100);
 }
 
-void printAlert() {
+void printCharacter(char a, int x) {
   display.setTextSize(1);
-  display.setCursor(70, 0);
-  display.print("A");
-  display.display();
-}
-
-void printShake() {
-  display.setTextSize(1);
-  display.setCursor(80, 0);
-  display.print("S");
+  display.setCursor(x, 0);
+  display.print(a);
   display.display();
 }
 
@@ -320,7 +319,7 @@ void levelBattery(uint8_t level) {
 }
 
 void levelWiFi(uint8_t level) {
-  display.fillRect(33, 0, 68, 8, BLACK);
+  display.fillRect(33, 0, 27, 8, BLACK);
   if (level > 10) {
     display.fillRoundRect(33, 0, 5, 8, 2, WHITE);
   }
@@ -347,7 +346,7 @@ void initOled() {
   display.println("Wi-Fi");
   display.display();
   // Battery
-  display.drawRect(97, 0, 26, 8, WHITE);
+  display.drawRoundRect(97, 0, 26, 8, 2, WHITE);
   display.display();
   // Measuaring
   display.setTextSize(1);
