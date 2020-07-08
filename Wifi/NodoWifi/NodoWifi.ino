@@ -47,11 +47,15 @@ const int timeThreshold = 150;
 long startTime = 0;
 char bufferP[60] = "";
 int distance = 0;
+int aux1=0;
+int aux2=0;
 bool flagOpen = false;
 bool flagClose = false;
 bool flagAlert1 = false;
 bool flagInterrupt = true;
 int voltaje = 10;
+int rssi = 0;
+
 WiFiClient client;
 HTTPClient http;
 NewPing sonar1(TRIGGER_PIN, ECHO_PIN_1, MAX_DISTANCE);
@@ -240,12 +244,11 @@ void statusOn(int time) {
 }
 
 void measuareDistanse() {
-  int aux1 = 0;
-  int aux2 = 0;
   aux1 = sonar1.ping_cm();
   if (aux1 == 0) {
     aux1 = 200;
   }
+  delay(10);
   aux2 = sonar2.ping_cm();
   if (aux2 == 0) {
     aux2 = 200;
@@ -261,9 +264,9 @@ void measuareDistanse() {
 }
 
 void printMeasure() {
-  int rssi = WiFi.RSSI();
   voltaje = round(map(analogRead (A0), 0, 1023, 0, 100)); // leer conversor
-  sprintf(bufferP, "D: %i P: %i V: %i", distance, rssi, voltaje);
+  rssi = round(map(WiFi.RSSI(), -90, -55, 0, 100));
+  sprintf(bufferP, "Dm: %i D1: %i D2: %i", distance, aux1, aux2);
   Serial.println(bufferP);
   display.fillRect(0, 25, 128, 8, BLACK);
   display.setTextSize(1);
@@ -271,7 +274,7 @@ void printMeasure() {
   display.print(bufferP);
   display.display();
   levelBattery(voltaje);
-  levelWiFi(100);
+  levelWiFi(rssi);
 }
 
 void printCharacter(char a, int x) {
