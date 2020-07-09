@@ -5,6 +5,7 @@
 #include <NewPing.h>
 #include <SPI.h>
 #include <Wire.h>
+#include <EEPROM.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Fonts/FreeMono9pt7b.h>
@@ -190,6 +191,12 @@ void setup() {
   digitalWrite(LED_STATUS, LOW);
   attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   Serial.begin(9600);
+  Serial.println("Start ...");
+  EEPROM.begin(32);
+  int EEaddress=0;
+  Serial.println(EEPROM.read(EEaddress));
+  EEPROM.write(EEaddress, 123); // Writes the value 123 to EEPROM
+  EEPROM.commit();
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
   display.clearDisplay();
   display.display();
@@ -266,7 +273,7 @@ void measuareDistanse() {
 void printMeasure() {
   voltaje = round(map(analogRead (A0), 0, 1023, 0, 100)); // leer conversor
   rssi = round(map(WiFi.RSSI(), -90, -55, 0, 100));
-  sprintf(bufferP, "Dm: %i D1: %i D2: %i", distance, aux1, aux2);
+  sprintf(bufferP, "Dm:%i D1:%i D2:%i", distance, aux1, aux2);
   Serial.println(bufferP);
   display.fillRect(0, 25, 128, 8, BLACK);
   display.setTextSize(1);
