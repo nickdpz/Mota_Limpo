@@ -37,18 +37,18 @@ Adafruit_SSD1306 display = Adafruit_SSD1306(128, 32, &Wire);
 //#define SERVER_IP_TEST "http://192.168.0.7:3000/routes/test"
 
 
-char* stassid = "";
-char* stapsk = "";
+char stassid[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+char stapsk[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
-char* ssid_d = "limpo";
-char* pass_d = "0000";
+const char ssid_d[] = "limpo";
+const char pass_d[] = "00000000";
 
 const char* eui = "00050";
 const char* euipsk = "._6mj&.dsh97kkb";
 
 const int timeThreshold = 150;
 long startTime = 0;
-char bufferP[200] = "";
+char bufferP[20] = "";
 int distance = 0;
 int aux1 = 0;
 int aux2 = 0;
@@ -65,56 +65,60 @@ NewPing sonar1(TRIGGER_PIN, ECHO_PIN_1, MAX_DISTANCE);
 NewPing sonar2(TRIGGER_PIN, ECHO_PIN_2, MAX_DISTANCE);
 
 void alert() {
-  sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\",\"content\":%i,\"battery\":%i}", eui, euipsk, distance, battery);
-  Serial.print("[HTTP] Send Measure...\n");
-  http.begin(client, SERVER_IP_ROUTE); //HTTP
-  http.addHeader("Content-Type", "application/json");
-  int httpCode = http.POST(bufferP);
-  String payload = http.getString();
-  if (httpCode > 0) {
-    Serial.printf("[HTTP] Response Measure Code: %d\n Payload: ", httpCode);
-    if (httpCode == HTTP_CODE_OK) {
-      const String& payload = http.getString();
-      Serial.println(payload);
+  if (WiFi.status() == WL_CONNECTED) {
+    sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\",\"content\":%i,\"battery\":%i}", eui, euipsk, distance, battery);
+    Serial.print("[HTTP] Send Measure...\n");
+    http.begin(client, SERVER_IP_ROUTE); //HTTP
+    http.addHeader("Content-Type", "application/json");
+    int httpCode = http.POST(bufferP);
+    String payload = http.getString();
+    if (httpCode > 0) {
+      Serial.printf("[HTTP] Response Measure Code: %d\n Payload: ", httpCode);
+      if (httpCode == HTTP_CODE_OK) {
+        const String& payload = http.getString();
+        Serial.println(payload);
+      }
+    } else {
+      Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
     }
-  } else {
-    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    http.end();
   }
-  http.end();
 }
 
 bool updateWifi() {
-  sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\"}", eui, euipsk);
-  Serial.print("[HTTP] Update Network...\n");
-  http.begin(client, SERVER_IP_WIFI);
-  http.addHeader("Content-Type", "application/json");
-  int httpCode = http.POST(bufferP);
-  String payload = http.getString();
-  if (httpCode > 0) {
-    Serial.printf("[HTTP] Update Network Response Code: %d\n", httpCode);
-    if (httpCode == HTTP_CODE_OK) {
-      const String& payload = http.getString();
-      DynamicJsonDocument doc(2048);
-      DeserializationError error = deserializeJson(doc, payload);
-      if (error) {
-        Serial.print(F("deserializeJson() failed: "));
-        Serial.println(error.c_str());
-        return false;
+  if (WiFi.status() == WL_CONNECTED) {
+    sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\"}", eui, euipsk);
+    Serial.print("[HTTP] Update Network...\n");
+    http.begin(client, SERVER_IP_WIFI);
+    http.addHeader("Content-Type", "application/json");
+    int httpCode = http.POST(bufferP);
+    String payload = http.getString();
+    if (httpCode > 0) {
+      Serial.printf("[HTTP] Update Network Response Code: %d\n", httpCode);
+      if (httpCode == HTTP_CODE_OK) {
+        const String& payload = http.getString();
+        DynamicJsonDocument doc(2048);
+        DeserializationError error = deserializeJson(doc, payload);
+        if (error) {
+          Serial.print(F("deserializeJson() failed: "));
+          Serial.println(error.c_str());
+          return false;
+        }
+        //Serial.println(doc["message"]["idWiFi"].as<char*>());
+        //Serial.println(doc["message"]["passWiFi"].as<char*>());
+        sprintf(stassid, "%s", doc["message"]["idWiFi"].as<char*>());
+        sprintf(stapsk, "%s", doc["message"]["passWiFi"].as<char*>());
+        Serial.print("Id WiFi:");
+        Serial.println(stassid);
+        Serial.print("Password WiFi:");
+        Serial.println(stapsk);
       }
-      //Serial.println(doc["message"]["idWiFi"].as<char*>());
-      //Serial.println(doc["message"]["passWiFi"].as<char*>());
-      sprintf(stassid, "%s", doc["message"]["idWiFi"].as<char*>());
-      sprintf(stapsk, "%s", doc["message"]["passWiFi"].as<char*>());
-      Serial.print("Id WiFi:");
-      Serial.println(stassid);
-      Serial.print("Password WiFi:");
-      Serial.println(stapsk);
+    } else {
+      Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      return false;
     }
-  } else {
-    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
-    return false;
+    http.end();
   }
-  http.end();
   return true;
 }
 
@@ -211,6 +215,7 @@ void set_light_sleep() {
 }
 
 void setWiFidB(uint8_t def) {
+  SPIFFS.remove(F("/state.txt"));
   File testFile = SPIFFS.open(F("/state.txt"), "w");
   if (testFile) {
     Serial.println("[dB] Write file content");
@@ -219,35 +224,41 @@ void setWiFidB(uint8_t def) {
     } else {
       sprintf(bufferP, "%s\n%s\n", stassid, stapsk);
     }
-    testFile.print(bufferP);
+    testFile.println(bufferP);
     testFile.close();
+    Serial.println(bufferP);
   } else {
     Serial.println("[dB] Problem on create file");
   }
+  testFile.close();
 }
 
 void getDataBase() {
   File testFile = SPIFFS.open(F("/state.txt"), "r");
   if (testFile) {
     Serial.println("[dB] Read file content 1");
+    String aux;
     uint8_t i = 0;
+    Serial.println("...........");
     while (testFile.available()) {
+      aux = testFile.readStringUntil('\n');
       if (i == 0) {
-        sprintf(stassid, "%s", testFile.readStringUntil('\n').c_str());
-      } else if (i == 1) {
-        sprintf(stapsk, "%s", testFile.readStringUntil('\n').c_str());
+        sprintf(stassid, "%s", aux.c_str());
+        Serial.println(stassid);
+      }
+      if (i == 1) {
+        sprintf(stapsk, "%s", aux.c_str());
+        Serial.println(stapsk);
       }
       i++;
     }
-    Serial.println("...........");
-    Serial.println(stassid);
-    Serial.println(stapsk);
     Serial.println("...........");
     testFile.close();
   } else {
     Serial.println("[dB] Problem on read file");
     setWiFidB(1);//se hace la primera vez
   }
+  testFile.close();
 }
 
 void setup() {
@@ -266,12 +277,16 @@ void setup() {
   getDataBase();
   if (!initWiFi()) {
     setWiFidB(1);
-    delay(6000000);
+    delay(600000);
     while (true); //si no se puede conectar se queda en un ciclo infinito
   }
-  if (updateWifi()) {
-      setWiFidB(0);
-  }
+  alert();
+  //bool updateN = updateWifi();
+  //  if (updateWifi()) {
+  //    setWiFidB(0);
+  //  }
+  delay(1000);
+  Serial.println("Finish Config ...");
 }
 
 void loop() {
