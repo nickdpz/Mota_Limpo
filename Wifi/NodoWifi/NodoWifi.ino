@@ -5,10 +5,10 @@
 #include <NewPing.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <EEPROM.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Fonts/FreeMono9pt7b.h>
+#include <FS.h>
 // Required for LIGHT_SLEEP_T delay mode
 extern "C" {
 #include "user_interface.h"
@@ -29,32 +29,34 @@ Adafruit_SSD1306 display = Adafruit_SSD1306(128, 32, &Wire);
 // you can use any GPIO for WAKE_UP_PIN except for D0/GPIO16 as it doesn't support interrupts
 
 
-//#define SERVER_IP_ROUTE "http://ritaportal.udistrital.edu.co:10280/routes"
-#define SERVER_IP_ROUTE "http://192.168.0.7:3000/routes"
-#define SERVER_IP_WIFI "http://192.168.0.7:3000/nodes/network"
-//#define SERVER_IP_WIFI "http://ritaportal.udistrital.edu.co:10280/nodes/network"
-#define SERVER_IP_TEST "http://192.168.0.7:3000/routes/test"
-//#define SERVER_IP_TEST "http://ritaportal.udistrital.edu.co:10280/test"
-#define SERVER_IP_SUCCESS "http://192.168.0.7:3000/routes/success"
+#define SERVER_IP_ROUTE "http://ritaportal.udistrital.edu.co:10280/routes"
+//#define SERVER_IP_ROUTE "http://192.168.0.7:3000/routes"
+#define SERVER_IP_WIFI "http://ritaportal.udistrital.edu.co:10280/nodes/network"
+//#define SERVER_IP_WIFI "http://192.168.0.7:3000/nodes/network"
+#define SERVER_IP_TEST "http://ritaportal.udistrital.edu.co:10280/test"
+//#define SERVER_IP_TEST "http://192.168.0.7:3000/routes/test"
 
 
-const char* stassid = "JAPEREZ";
-const char* stapsk = "26071967";
+char* stassid = "";
+char* stapsk = "";
 
-const char* eui = "00091";
-const char* euipsk = "e9h5fy@cf1yn4.$";
+char* ssid_d = "limpo";
+char* pass_d = "0000";
+
+const char* eui = "00050";
+const char* euipsk = "._6mj&.dsh97kkb";
 
 const int timeThreshold = 150;
 long startTime = 0;
-char bufferP[60] = "";
+char bufferP[200] = "";
 int distance = 0;
-int aux1=0;
-int aux2=0;
+int aux1 = 0;
+int aux2 = 0;
 bool flagOpen = false;
 bool flagClose = false;
 bool flagAlert1 = false;
-bool flagInterrupt = true;
-int voltaje = 10;
+bool flagInterrupt = false;
+int battery = 10;
 int rssi = 0;
 
 WiFiClient client;
@@ -63,19 +65,17 @@ NewPing sonar1(TRIGGER_PIN, ECHO_PIN_1, MAX_DISTANCE);
 NewPing sonar2(TRIGGER_PIN, ECHO_PIN_2, MAX_DISTANCE);
 
 void alert() {
-  sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\",\"content\":%d}", eui, euipsk, distance);
-  Serial.print("[HTTP] Alert...\n");
+  sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\",\"content\":%i,\"battery\":%i}", eui, euipsk, distance, battery);
+  Serial.print("[HTTP] Send Measure...\n");
   http.begin(client, SERVER_IP_ROUTE); //HTTP
   http.addHeader("Content-Type", "application/json");
   int httpCode = http.POST(bufferP);
   String payload = http.getString();
   if (httpCode > 0) {
-    Serial.printf("[HTTP] POST... code: %d\n", httpCode);
+    Serial.printf("[HTTP] Response Measure Code: %d\n Payload: ", httpCode);
     if (httpCode == HTTP_CODE_OK) {
       const String& payload = http.getString();
-      Serial.println("received payload:\n<<");
       Serial.println(payload);
-      Serial.println(">>");
     }
   } else {
     Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
@@ -83,34 +83,39 @@ void alert() {
   http.end();
 }
 
-void getWifi() {
-  if (WiFi.status() == WL_CONNECTED) {
-    sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s}", eui, euipsk);
-    Serial.print("[HTTP] Success...\n");
-    http.begin(client, SERVER_IP_WIFI);
-    http.addHeader("Content-Type", "application/json");
-    int httpCode = http.POST(bufferP);
-    String payload = http.getString();
-    if (httpCode > 0) {
-      Serial.printf("[HTTP] POST... code: %d\n", httpCode);
-      if (httpCode == HTTP_CODE_OK) {
-        DynamicJsonDocument doc(1024);
-        DeserializationError error = deserializeJson(doc, http.getString());
-        if (error)
-          return;
-        stassid = doc["idWiFi"];
-        stapsk = doc["passWiFi"];
-        Serial.print("Id WiFi:");
-        Serial.println(stassid);
-        Serial.print("PSK:");
-        Serial.print(stapsk);
+bool updateWifi() {
+  sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\"}", eui, euipsk);
+  Serial.print("[HTTP] Update Network...\n");
+  http.begin(client, SERVER_IP_WIFI);
+  http.addHeader("Content-Type", "application/json");
+  int httpCode = http.POST(bufferP);
+  String payload = http.getString();
+  if (httpCode > 0) {
+    Serial.printf("[HTTP] Update Network Response Code: %d\n", httpCode);
+    if (httpCode == HTTP_CODE_OK) {
+      const String& payload = http.getString();
+      DynamicJsonDocument doc(2048);
+      DeserializationError error = deserializeJson(doc, payload);
+      if (error) {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.c_str());
+        return false;
       }
-    } else {
-      Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      //Serial.println(doc["message"]["idWiFi"].as<char*>());
+      //Serial.println(doc["message"]["passWiFi"].as<char*>());
+      sprintf(stassid, "%s", doc["message"]["idWiFi"].as<char*>());
+      sprintf(stapsk, "%s", doc["message"]["passWiFi"].as<char*>());
+      Serial.print("Id WiFi:");
+      Serial.println(stassid);
+      Serial.print("Password WiFi:");
+      Serial.println(stapsk);
     }
-    http.end();
-    initWiFi();
+  } else {
+    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    return false;
   }
+  http.end();
+  return true;
 }
 
 void IRAM_ATTR irq_button_c()
@@ -131,8 +136,8 @@ void IRAM_ATTR irq_button_c()
   }
 }
 
-void initWiFi() {
-  bool flagPoints = true;
+bool initWiFi() {
+  bool flagOut = true;
   if (WiFi.status() != WL_CONNECTED) {
     wifi_set_sleep_type(NONE_SLEEP_T);
     wifi_fpm_close();
@@ -144,25 +149,47 @@ void initWiFi() {
     display.setCursor(0, 4);
     display.print("Connecting to");
     display.setCursor(0, 16);
+    Serial.print("Connecting to : ");
+    Serial.println(stassid);
+    Serial.print("Pass : ");
+    Serial.println(stapsk);
     display.println(stassid);
     display.display();
     WiFi.begin(stassid, stapsk);
-    while (WiFi.status() != WL_CONNECTED) {
+    uint8_t count = 0;
+    while ((WiFi.status() != WL_CONNECTED) && (flagOut)) {
       display.print(".");
       display.display();
       delay(500);
+      if (count > 50) {
+        flagOut = false;
+      }
+      count++;
     }
-    display.clearDisplay();
-    display.setCursor(0, 4);
-    display.setTextSize(2);
-    display.println("Connected");
-    display.setTextSize(1);
-    display.setCursor(6, 22);
-    display.print("to ");
-    display.print(stassid);
-    display.display();
-    digitalWrite(LED_STATUS, flagAlert1);
-    delay(3000);
+    if (flagOut) {
+      display.clearDisplay();
+      display.setCursor(0, 4);
+      display.setTextSize(2);
+      display.println("Connected");
+      display.setTextSize(1);
+      display.setCursor(6, 22);
+      display.print("to ");
+      display.print(stassid);
+      display.display();
+      digitalWrite(LED_STATUS, flagAlert1);
+      delay(3000);
+    } else {
+      display.clearDisplay();
+      display.setCursor(0, 4);
+      display.setTextSize(2);
+      display.println("No Connect");
+      display.setTextSize(1);
+      display.setCursor(6, 22);
+      display.print("set default WiFi");
+      display.display();
+      digitalWrite(LED_STATUS, false);
+    }
+    return flagOut;
   }
 }
 
@@ -183,6 +210,46 @@ void set_light_sleep() {
   Serial.println("Exit light sleep mode");
 }
 
+void setWiFidB(uint8_t def) {
+  File testFile = SPIFFS.open(F("/state.txt"), "w");
+  if (testFile) {
+    Serial.println("[dB] Write file content");
+    if (def == 1) {
+      sprintf(bufferP, "%s\n%s\n", ssid_d, pass_d);
+    } else {
+      sprintf(bufferP, "%s\n%s\n", stassid, stapsk);
+    }
+    testFile.print(bufferP);
+    testFile.close();
+  } else {
+    Serial.println("[dB] Problem on create file");
+  }
+}
+
+void getDataBase() {
+  File testFile = SPIFFS.open(F("/state.txt"), "r");
+  if (testFile) {
+    Serial.println("[dB] Read file content 1");
+    uint8_t i = 0;
+    while (testFile.available()) {
+      if (i == 0) {
+        sprintf(stassid, "%s", testFile.readStringUntil('\n').c_str());
+      } else if (i == 1) {
+        sprintf(stapsk, "%s", testFile.readStringUntil('\n').c_str());
+      }
+      i++;
+    }
+    Serial.println("...........");
+    Serial.println(stassid);
+    Serial.println(stapsk);
+    Serial.println("...........");
+    testFile.close();
+  } else {
+    Serial.println("[dB] Problem on read file");
+    setWiFidB(1);//se hace la primera vez
+  }
+}
+
 void setup() {
   pinMode(LED_WIFI, OUTPUT);
   pinMode(LED_STATUS, OUTPUT);
@@ -192,15 +259,19 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   Serial.begin(9600);
   Serial.println("Start ...");
-  EEPROM.begin(32);
-  int EEaddress=0;
-  Serial.println(EEPROM.read(EEaddress));
-  EEPROM.write(EEaddress, 123); // Writes the value 123 to EEPROM
-  EEPROM.commit();
+  SPIFFS.begin();
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
   display.clearDisplay();
   display.display();
-  initWiFi();
+  getDataBase();
+  if (!initWiFi()) {
+    setWiFidB(1);
+    delay(6000000);
+    while (true); //si no se puede conectar se queda en un ciclo infinito
+  }
+  if (updateWifi()) {
+      setWiFidB(0);
+  }
 }
 
 void loop() {
@@ -209,6 +280,8 @@ void loop() {
     initOled();
     levelBattery(100);
     levelWiFi(100);
+    getDistance();
+    distance = (aux1 + aux2) * 0.5;
     for (uint8_t count = 0; count < 40; count++) {
       if ((!flagOpen) && (WiFi.status() == WL_CONNECTED)) {
         measuareDistanse();
@@ -242,6 +315,7 @@ void loop() {
   }
 }
 
+
 void statusOn(int time) {
   digitalWrite(LED_WIFI, HIGH);
   delay(time * 100);
@@ -250,7 +324,7 @@ void statusOn(int time) {
   flagInterrupt = true;
 }
 
-void measuareDistanse() {
+void getDistance() {
   aux1 = sonar1.ping_cm();
   if (aux1 == 0) {
     aux1 = 200;
@@ -260,18 +334,20 @@ void measuareDistanse() {
   if (aux2 == 0) {
     aux2 = 200;
   }
-  sprintf(bufferP, "D1: %i D2: %i", aux1, aux2);
-  Serial.println(bufferP);
+}
+
+void measuareDistanse() {
+  getDistance();
   if (abs(aux2 - aux1) > 30) {
     printCharacter('S', 70);
   } else {
-    printCharacter(' ', 70);
+    display.fillRect(70, 0, 7, 8, BLACK);
   }
   distance = ((aux1 + aux2) * 0.5 + distance) * 0.5;
 }
 
 void printMeasure() {
-  voltaje = round(map(analogRead (A0), 0, 1023, 0, 100)); // leer conversor
+  battery = round(map(analogRead (A0), 0, 1023, 0, 100)); // leer conversor
   rssi = round(map(WiFi.RSSI(), -90, -55, 0, 100));
   sprintf(bufferP, "Dm:%i D1:%i D2:%i", distance, aux1, aux2);
   Serial.println(bufferP);
@@ -280,7 +356,7 @@ void printMeasure() {
   display.setCursor(0, 25);
   display.print(bufferP);
   display.display();
-  levelBattery(voltaje);
+  levelBattery(battery);
   levelWiFi(rssi);
 }
 
