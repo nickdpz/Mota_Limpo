@@ -198,11 +198,11 @@ void set_light_sleep() {
   printModeSleep();
   detachInterrupt(digitalPinToInterrupt(BUTTON_C));
   digitalWrite(LED_WIFI, HIGH);
-  uint32_t sleep_time_in_ms = 60000;
+  uint32_t sleep_time_in_ms = 120000;
   WiFi.mode(WIFI_OFF);  // you must turn the modem off; using disconnect won't work
   wifi_set_opmode(NULL_MODE);
   wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);//LIGHT_SLEEP_T//MODEM_SLEEP_T
-  //gpio_pin_wakeup_enable(GPIO_ID_PIN(BUTTON_C), GPIO_PIN_INTR_LOLEVEL);
+  gpio_pin_wakeup_enable(GPIO_ID_PIN(BUTTON_C), GPIO_PIN_INTR_LOLEVEL);
   wifi_fpm_open();
   wifi_fpm_do_sleep(sleep_time_in_ms * 1000 );
   delay(sleep_time_in_ms + 1);
@@ -265,6 +265,7 @@ void setup() {
   display.clearDisplay();
   display.display();
   getDataBase();
+  //setWiFidB(1);
   if (!initWiFi()) {
     setWiFidB(1);
     delay(6000000);
@@ -294,16 +295,16 @@ void loop() {
             printCharacter(' ', 80);
           }
         }
-        if (distance < 37) {
-          flagAlert1 = true;
-          digitalWrite(LED_STATUS, true);
-          printCharacter('A', 80);
-        }
         printMeasure();
         statusOn(10);
       }
     }
     if (!flagOpen) {
+      if (distance < 37) {
+          flagAlert1 = true;
+          digitalWrite(LED_STATUS, true);
+          printCharacter('A', 80);
+      }
       alert();
       set_light_sleep();
     }
