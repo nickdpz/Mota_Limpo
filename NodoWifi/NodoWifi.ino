@@ -234,7 +234,7 @@ void getDataBase() {
     while (testFile.available()) {
       if (i == 0) {
         sprintf(stassid, "%s", testFile.readStringUntil('\n').c_str());
-      } 
+      }
       if (i == 1) {
         sprintf(stapsk, "%s", testFile.readStringUntil('\n').c_str());
       }
@@ -255,11 +255,14 @@ void setup() {
   pinMode(LED_WIFI, OUTPUT);
   pinMode(LED_STATUS, OUTPUT);
   pinMode(BUTTON_C, INPUT_PULLUP);
-  digitalWrite(LED_WIFI, LOW);
+  digitalWrite(LED_STATUS, HIGH);
+  delay(200);
+  digitalWrite(LED_WIFI, LOW);  
   digitalWrite(LED_STATUS, LOW);
   attachInterrupt(digitalPinToInterrupt(BUTTON_C), irq_button_c, FALLING);
   Serial.begin(9600);
   Serial.println("Start ...");
+
   SPIFFS.begin();
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
   display.clearDisplay();
@@ -272,7 +275,7 @@ void setup() {
     while (true); //si no se puede conectar se queda en un ciclo infinito
   }
   if (updateWifi()) {
-      setWiFidB(0);
+    setWiFidB(0);
   }
 }
 
@@ -301,9 +304,9 @@ void loop() {
     }
     if (!flagOpen) {
       if (distance < 37) {
-          flagAlert1 = true;
-          digitalWrite(LED_STATUS, true);
-          printCharacter('A', 80);
+        flagAlert1 = true;
+        digitalWrite(LED_STATUS, true);
+        printCharacter('A', 80);
       }
       alert();
       set_light_sleep();
@@ -344,6 +347,11 @@ void measuareDistanse() {
     printCharacter('S', 70);
   } else {
     display.fillRect(70, 0, 7, 8, BLACK);
+  }
+  if (distance < 37) {
+    printCharacter('A', 80);
+  } else {
+    printCharacter(' ', 80);
   }
   distance = ((aux1 + aux2) * 0.5 + distance) * 0.5;
 }
