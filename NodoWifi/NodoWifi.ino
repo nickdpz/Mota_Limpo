@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <NewPing.h>
 #include <SPI.h>
@@ -27,12 +28,14 @@ Adafruit_SSD1306 display = Adafruit_SSD1306(128, 32, &Wire);
 
 #define WAKE_UP_PIN 0 // D3/GPIO0, can also force a serial flash upload with RESET
 // you can use any GPIO for WAKE_UP_PIN except for D0/GPIO16 as it doesn't support interrupts
-
+#define SERVER_HOST "https://limpo.com.co"
 #define SERVER_IP_ROUTE "https://limpo.com.co/routes"
 //#define SERVER_IP_ROUTE "http://192.168.0.7:3000/routes"
 #define SERVER_IP_WIFI "https://limpo.com.co/nodes/network"
 //#define SERVER_IP_WIFI "http://192.168.0.7:3000/nodes/network"
 #define SERVER_IP_TEST "https://limpo.com.co/test"
+
+//81:F1:30:54:A6:72:95:9C:EA:5B:CA:35:09:19:85:A9:B5:B5:12:10
 //#define SERVER_IP_TEST "http://192.168.0.7:3000/routes/test"
 
 char stateNode[] = "f";
@@ -57,14 +60,17 @@ bool flagAlert1 = false;
 bool flagInterrupt = false;
 int battery = 10;
 int rssi = 0;
+const char* fingerprint = "81 F1 30 54 A6 72 95 9C EA 5B CA 35 09 19 85 A9 B5 B5 12 10";
 
-WiFiClient client;
+WiFiClientSecure client;
 HTTPClient http;
 NewPing sonar1(TRIGGER_PIN, ECHO_PIN_1, MAX_DISTANCE);
 NewPing sonar2(TRIGGER_PIN, ECHO_PIN_2, MAX_DISTANCE);
 
 void alert()
 {
+  client.setInsecure(); //the magic line, use with caution
+  client.connect(SERVER_HOST, 443);
   sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\",\"content\":%i,\"battery\":%i}", eui, euipsk, distance, battery);
   Serial.print("[HTTP] Send Measure...\n");
   http.begin(client, SERVER_IP_ROUTE); //HTTP
@@ -89,6 +95,8 @@ void alert()
 
 bool updateWiFi()
 {
+  client.setInsecure(); //the magic line, use with caution
+  client.connect(SERVER_HOST, 443);
   sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\"}", eui, euipsk);
   Serial.print("[HTTP] Update Network...\n");
   http.begin(client, SERVER_IP_WIFI);
@@ -98,6 +106,7 @@ bool updateWiFi()
   if (httpCode > 0)
   {
     Serial.printf("[HTTP] Update Network Response Code: %d\n", httpCode);
+
     if (httpCode == HTTP_CODE_OK)
     {
       const String &payload = http.getString();
@@ -117,6 +126,8 @@ bool updateWiFi()
       Serial.println(stassid);
       Serial.print("Password WiFi:");
       Serial.println(stapsk);
+    } else {
+      Serial.printf("[HTTP] POST... failed, error: %s\n", http.getString().c_str());
     }
   }
   else
