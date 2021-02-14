@@ -58,6 +58,8 @@ bool flagOpen = false;
 bool flagClose = false;
 bool flagAlert1 = false;
 bool flagInterrupt = false;
+bool flagSend = false;
+bool flagMesuare = true;
 int battery = 10;
 int rssi = 0;
 const char* fingerprint = "81 F1 30 54 A6 72 95 9C EA 5B CA 35 09 19 85 A9 B5 B5 12 10";
@@ -69,6 +71,17 @@ NewPing sonar2(TRIGGER_PIN, ECHO_PIN_2, MAX_DISTANCE);
 
 void alert()
 {
+  flagSend = true;
+  display.setTextSize(1);
+  display.fillRect(0, 12, 128, 8, BLACK);
+  display.setCursor(4, 12);
+  display.println("Send Mesuares ..");
+  display.display();
+  display.fillRect(0, 25, 128, 8, BLACK);
+  sprintf(bufferP, "Dm:%i cm B:%i per", distance, battery, aux2);
+  display.setCursor(0, 25);
+  display.print(bufferP);
+  display.display();
   client.setInsecure(); //the magic line, use with caution
   client.connect(SERVER_HOST, 443);
   sprintf(bufferP, "{\"eui\":\"%s\",\"pass\":\"%s\",\"content\":%i,\"battery\":%i}", eui, euipsk, distance, battery);
@@ -90,6 +103,7 @@ void alert()
   {
     Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
+  flagSend = false;
   http.end();
 }
 
@@ -231,10 +245,10 @@ void set_light_sleep()
   printModeSleep();
   detachInterrupt(digitalPinToInterrupt(BUTTON_C));
   digitalWrite(LED_WIFI, HIGH);
-  uint32_t sleep_time_in_ms = 120000;
+  uint32_t sleep_time_in_ms = 400000;
   WiFi.mode(WIFI_OFF); // you must turn the modem off; using disconnect won't work
   wifi_set_opmode(NULL_MODE);
-  wifi_fpm_set_sleep_type(LIGHT_SLEEP_T); //LIGHT_SLEEP_T//MODEM_SLEEP_T
+  wifi_fpm_set_sleep_type(MODEM_SLEEP_T); //LIGHT_SLEEP_T//MODEM_SLEEP_T
   gpio_pin_wakeup_enable(GPIO_ID_PIN(BUTTON_C), GPIO_PIN_INTR_LOLEVEL);
   wifi_fpm_open();
   wifi_fpm_do_sleep(sleep_time_in_ms * 1000);
@@ -401,7 +415,7 @@ void loop()
             flagClose = false;
             flagAlert1 = false;
             digitalWrite(LED_STATUS, false);
-            printCharacter(' ', 80);
+            printCharacter(' ', 80, 0);
           }
         }
         printMeasure();
@@ -414,7 +428,7 @@ void loop()
       {
         flagAlert1 = true;
         digitalWrite(LED_STATUS, true);
-        printCharacter('A', 80);
+        printCharacter('A', 80, 0);
       }
       alert();
       set_light_sleep();
@@ -460,7 +474,7 @@ void measureDistance()
   getDistance();
   if (abs(aux2 - aux1) > 30)
   {
-    printCharacter('S', 70);
+    printCharacter('S', 70, 0);
   }
   else
   {
@@ -468,13 +482,21 @@ void measureDistance()
   }
   if (distance < 37)
   {
-    printCharacter('A', 80);
+    printCharacter('A', 80, 0);
   }
   else
   {
-    printCharacter(' ', 80);
+    printCharacter(' ', 80, 0);
   }
   distance = ((aux1 + aux2) * 0.5 + distance) * 0.5;
+  display.fillRect(84, 12, 8, 8, BLACK);
+  if (flagMesuare) {
+    printCharacter('.', 84, 12);
+    flagMesuare = false;
+  } else {
+    printCharacter('*', 84, 12);
+    flagMesuare = true;
+  }
 }
 
 void printMeasure()
@@ -492,10 +514,10 @@ void printMeasure()
   levelWiFi(rssi);
 }
 
-void printCharacter(char a, int x)
+void printCharacter(char a, int x, int y)
 {
   display.setTextSize(1);
-  display.setCursor(x, 0);
+  display.setCursor(x, y);
   display.print(a);
   display.display();
 }
@@ -581,8 +603,10 @@ void initOled()
   display.drawRoundRect(97, 0, 26, 8, 2, WHITE);
   display.display();
   // Measuaring
-  display.setTextSize(1);
-  display.setCursor(4, 12);
-  display.println("Measuring ..");
-  display.display();
+  if (!flagSend) {
+    display.setTextSize(1);
+    display.setCursor(4, 12);
+    display.println("Measuring ...");
+    display.display();
+  }
 }
